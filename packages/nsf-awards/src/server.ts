@@ -146,7 +146,31 @@ export class NSFAwardsServer extends BaseAccessServer {
       return await this.find_nsf_awards_by_keywords({ keywords: args.query, limit: args.limit });
     }
 
-    return this.errorResponse("Provide id, query, pi, or institution");
+    // No parameters provided = list recent awards
+    return await this.listRecentAwards(args.limit);
+  }
+
+  private async listRecentAwards(limit: number = 10): Promise<CallToolResult> {
+    const rpp = Math.min(limit || 10, 100);
+    const apiUrl = `https://api.nsf.gov/services/v1/awards.json?printFields=id,title,abstractText,piFirstName,piLastName,coPDPI,poName,awardeeName,awardeeCity,awardeeStateCode,fundsObligatedAmt,estimatedTotalAmt,startDate,expDate,primaryProgram,ueiNumber,fundProgramName&offset=1&rpp=${rpp}`;
+
+    const response = await fetch(apiUrl, { redirect: "follow" });
+    if (!response.ok) {
+      throw new Error(`NSF API request failed: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const awards =
+      data.response?.award?.map((award: RawNSFAward) => this.parseNSFAward(award)) || [];
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ total: awards.length, items: awards }),
+        },
+      ],
+    };
   }
 
   private async find_nsf_awards_by_pi(args: { pi_name: string; limit?: number }) {

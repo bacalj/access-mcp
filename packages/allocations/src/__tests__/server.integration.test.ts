@@ -251,7 +251,7 @@ describe("AllocationsServer Integration Tests", () => {
       console.log("✅ Empty results handled correctly");
     }, 15000);
 
-    it("should require at least one search parameter", async () => {
+    it("should list all projects when no parameters provided", async () => {
       const result = await server["handleToolCall"]({
         method: "tools/call",
         params: {
@@ -261,14 +261,14 @@ describe("AllocationsServer Integration Tests", () => {
       });
 
       const content = result.content[0] as TextContent;
-
-      // Should contain error message about required parameters
       const responseData = JSON.parse(content.text);
-      expect(responseData).toHaveProperty("error");
-      expect(responseData.error).toContain("search parameter");
 
-      console.log("✅ Parameter validation working");
-    }, 5000);
+      expect(responseData).toHaveProperty("total");
+      expect(responseData).toHaveProperty("items");
+      expect(responseData.total).toBeGreaterThan(0);
+
+      console.log("✅ List all projects working");
+    }, 15000);
   });
 
   describe("NSF Integration", () => {

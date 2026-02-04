@@ -396,7 +396,24 @@ describe("NSFAwardsServer", () => {
       expect(response.error).toContain("No NSF award found");
     });
 
-    it("should require at least one search parameter", async () => {
+    it("should list recent awards when no parameters provided", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          response: {
+            award: [
+              {
+                id: "1111111",
+                title: "Recent Award",
+                piFirstName: "Jane",
+                piLastName: "Doe",
+                awardeeName: "Test University",
+              },
+            ],
+          },
+        }),
+      });
+
       const result = await server["handleToolCall"]({
         params: {
           name: "search_nsf_awards",
@@ -404,10 +421,11 @@ describe("NSFAwardsServer", () => {
         },
       });
 
-      expect(result).toHaveProperty("isError", true);
+      expect(result).not.toHaveProperty("isError", true);
       const response = JSON.parse(result.content[0].text);
-      expect(response).toHaveProperty("error");
-      expect(response.error).toContain("Provide");
+      expect(response).toHaveProperty("total");
+      expect(response).toHaveProperty("items");
+      expect(response.total).toBeGreaterThanOrEqual(0);
     });
   });
 

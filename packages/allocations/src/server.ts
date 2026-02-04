@@ -676,22 +676,8 @@ sort_by: "date_desc"
       );
     }
 
-    // If no parameters provided, return error
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify(
-            {
-              error:
-                "Please provide at least one search parameter: query, project_id, field_of_science, resource_name, allocation_type, similar_to, or similarity_keywords",
-            },
-            null,
-            2
-          ),
-        },
-      ],
-    };
+    // No parameters provided = list all projects
+    return await this.listAllProjects(args.limit);
   }
 
   /**
@@ -1035,6 +1021,37 @@ sort_by: "date_desc"
       project.piInstitution.toLowerCase().includes(searchTerms) ||
       project.fos.toLowerCase().includes(searchTerms)
     );
+  }
+
+  private async listAllProjects(limit: number = 20) {
+    if (limit < 1 || limit > 200) limit = Math.max(1, Math.min(limit, 200));
+
+    const results: Project[] = [];
+    let currentPage = 1;
+    const maxPages = 10;
+
+    while (results.length < limit && currentPage <= maxPages) {
+      const data = await this.fetchProjects(currentPage);
+      results.push(...data.projects);
+      currentPage++;
+      if (currentPage > data.pages) break;
+    }
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(
+            {
+              total: results.slice(0, limit).length,
+              items: results.slice(0, limit),
+            },
+            null,
+            2
+          ),
+        },
+      ],
+    };
   }
 
   private async getProjectDetails(projectId: number) {
