@@ -131,18 +131,20 @@ export class EventsServer extends BaseAccessServer {
       {
         name: "search_events",
         description:
-          "Search ACCESS-CI events (workshops, webinars, training). Returns future events by default. Use date='past' or start_date/end_date for historical events. Returns {total, items}.",
+          "Search ACCESS-CI events (training, office hours, conferences, and other community events). Returns future events by default. The corpus categorizes events by `type` (Training, Office Hours, Conference, Other) — there is no 'webinar' type. For generic asks about upcoming events, omit `query` and optionally filter by `type`; reserve `query` for specific keywords the user mentioned (e.g. 'globus', 'python'). If a query returns 0 items, retry without it. Use date='past' or start_date/end_date for historical events. Returns {total, items, note?}.",
         inputSchema: {
           type: "object",
           properties: {
             query: {
               type: "string",
-              description: "Search titles, descriptions, speakers, tags",
+              description:
+                "Full-text match on titles, descriptions, speakers, and tags. Use only for specific keywords the user mentioned. Do not use for generic event-category words like 'webinar' or 'workshop' — filter by `type` instead, or omit.",
             },
             type: {
               type: "string",
               description:
-                "Filter by event type. Common values: training, webinar, workshop, Office Hours, Conference, Other",
+                "Filter by event type. These are the only values present in the corpus.",
+              enum: ["Training", "Office Hours", "Conference", "Other"],
             },
             tags: {
               type: "string",
@@ -395,6 +397,21 @@ Returns: {total, items: [{title, start_date, end_date, status, ...}]}`,
     // Apply limit after sorting and filtering
     const limited = params.limit ? filtered.slice(0, params.limit) : filtered;
 
+    // If the query returned nothing but there are upcoming events in the corpus,
+    // hint to the caller that their query term may not match the event-type vocabulary
+    // (e.g. "webinar" — no event is typed that way).
+    let note: string | undefined;
+    if (limited.length === 0 && params.query) {
+      const upcomingCount = await this.countUpcomingEvents();
+      if (upcomingCount > 0) {
+        note =
+          `No events matched query='${params.query}'. The corpus categorizes events by type ` +
+          `(Training | Office Hours | Conference | Other) — check that your query term is a specific keyword, ` +
+          `not a generic event category. ${upcomingCount} upcoming event(s) exist. ` +
+          `Call again without \`query\` (optionally with \`type\`) to see them.`;
+      }
+    }
+
     return {
       content: [
         {
@@ -402,10 +419,24 @@ Returns: {total, items: [{title, start_date, end_date, status, ...}]}`,
           text: JSON.stringify({
             total: limited.length,
             items: limited,
+            ...(note ? { note } : {}),
           }),
         },
       ],
     };
+  }
+
+  private async countUpcomingEvents(): Promise<number> {
+    try {
+      const url = new URL("/api/2.3/events", this.baseURL);
+      url.searchParams.set("items_per_page", "25");
+      url.searchParams.set("beginning_date_relative", "today");
+      const response = await this.httpClient.get(url.toString());
+      if (response.status !== 200 || !Array.isArray(response.data)) return 0;
+      return response.data.length;
+    } catch {
+      return 0;
+    }
   }
 
   private async searchEvents(params: SearchEventsParams): Promise<CallToolResult> {
